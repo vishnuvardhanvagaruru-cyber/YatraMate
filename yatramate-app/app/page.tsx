@@ -1,7 +1,7 @@
 "use client";
-
 import { useState, type FormEvent } from "react";
-
+import SaveTrip from "./components/SaveTrip";
+import AccountHeader from "./components/AccountHeader";
 type Trip = {
   destination: string;
   startDate: string;
@@ -94,30 +94,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen w-full bg-[#f7faf9] font-sans text-slate-900">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-5">
-          <a
-            href="#"
-            aria-label="YatraMate home"
-            className="flex items-center gap-2 text-xl font-bold tracking-tight"
-          >
-            <span
-              aria-hidden="true"
-              className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-700 text-white"
-            >
-              Y
-            </span>
-            YatraMate
-          </a>
-
-          <a
-            href="#planner"
-            className="rounded-full bg-teal-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-teal-800"
-          >
-            Plan a trip
-          </a>
-        </div>
-      </header>
+      <AccountHeader />
 
       <main className="mx-auto max-w-6xl px-5 pb-16">
         <section className="grid items-center gap-10 py-12 md:grid-cols-2 md:py-20">
@@ -394,10 +371,7 @@ export default function Home() {
               ))}
             </div>
 
-            <p role="status" className="mt-6 text-sm font-medium text-teal-900">
-              Not saved yet. Refreshing or closing this page will clear your
-              draft.
-            </p>
+            <SaveTrip trip={trip} />
           </section>
         )}
       </main>

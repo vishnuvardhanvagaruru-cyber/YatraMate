@@ -77,7 +77,7 @@ export default function AccountHeader() {
       if (error) throw error;
 
       // Reload the page so account-specific screen data is cleared.
-      window.location.assign("/");
+     window.location.assign(new URL("/", window.location.origin).href);
     } catch {
       setError("Could not log out. Please try again.");
       setBusy(false);

@@ -1,27 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import {
-  useEffect,
-  useRef,
-  useState,
-  type FormEvent,
-} from "react";
+import { useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import AccountHeader from "../components/AccountHeader";
 import ProfileEditor from "../components/ProfileEditor";
+import TripCard, {
+  formatDate,
+  tripColumns,
+  type SavedTrip,
+} from "../components/TripCard";
 import { createClient } from "../../lib/supabase/client";
-
-type SavedTrip = {
-  id: string;
-  destination: string;
-  start_date: string;
-  days: number;
-  travelers: number;
-  budget: number;
-  itinerary: string[];
-  created_at: string;
-};
 
 type ProfileData = {
   user: User | null;
@@ -30,265 +19,10 @@ type ProfileData = {
   error: string;
 };
 
-const tripColumns =
-  "id, destination, start_date, days, travelers, budget, itinerary, created_at";
-
-function formatDate(value: string) {
-  const date = new Date(
-    value.length === 10 ? `${value}T00:00:00` : value
-  );
-
-  if (Number.isNaN(date.getTime())) return "Not available";
-
-  return date.toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-type TripCardProps = {
-  trip: SavedTrip;
-  ownerId: string;
-  editing: boolean;
-  anotherTripIsEditing: boolean;
-  onStartEditing: () => void;
-  onStopEditing: () => void;
-  onSaved: (trip: SavedTrip) => void;
-};
-
-function TripCard({
-  trip,
-  ownerId,
-  editing,
-  anotherTripIsEditing,
-  onStartEditing,
-  onStopEditing,
-  onSaved,
-}: TripCardProps) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
-  const saving = useRef(false);
-
-  function startEditing() {
-    setError("");
-    setMessage("");
-    onStartEditing();
-  }
-
-  function cancelEditing() {
-    setError("");
-    setMessage("");
-    onStopEditing();
-  }
-
-  async function saveChanges(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (saving.current) return;
-
-    const form = new FormData(event.currentTarget);
-
-    const itinerary = trip.itinerary.map((_, index) =>
-      String(form.get(`day-${index}`) ?? "").trim()
-    );
-
-    if (
-      itinerary.length !== trip.days ||
-      itinerary.some((text) => !text || text.length > 3000)
-    ) {
-      setError(
-        "Enter a plan for every day, using no more than 3,000 characters per day."
-      );
-      return;
-    }
-
-    saving.current = true;
-    setBusy(true);
-    setError("");
-    setMessage("");
-
-    try {
-      const supabase = createClient();
-
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser();
-
-      if (authError || !user || user.id !== ownerId) {
-        throw new Error(
-          "Your account session changed. Please log in again before saving."
-        );
-      }
-
-      const { data, error: updateError } = await supabase
-        .from("trips")
-        .update({ itinerary })
-        .eq("id", trip.id)
-        .eq("user_id", user.id)
-        .select(tripColumns)
-        .single();
-
-      if (updateError) {
-        throw new Error(updateError.message);
-      }
-
-      if (!data) {
-        throw new Error(
-          "The update could not be confirmed. Please try again."
-        );
-      }
-
-      onSaved(data as SavedTrip);
-      onStopEditing();
-      setMessage("Your trip changes have been saved.");
-    } catch (error) {
-      setError(
-        error instanceof Error
-          ? error.message
-          : "Could not save your changes. Please try again."
-      );
-    } finally {
-      saving.current = false;
-      setBusy(false);
-    }
-  }
-
-  return (
-    <article className="rounded-2xl border border-slate-200 bg-white p-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h3 className="break-words text-xl font-bold">
-            {trip.destination}
-          </h3>
-
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            {formatDate(trip.start_date)} · {trip.days}{" "}
-            {trip.days === 1 ? "day" : "days"} · {trip.travelers}{" "}
-            {trip.travelers === 1 ? "traveler" : "travelers"}
-          </p>
-        </div>
-
-        <div className="rounded-xl bg-teal-50 px-4 py-3">
-          <p className="text-xs text-slate-500">Total budget</p>
-          <p className="mt-1 font-bold text-teal-800">
-            ₹{Number(trip.budget).toLocaleString("en-IN")}
-          </p>
-        </div>
-      </div>
-
-      {message && (
-        <p role="status" className="mt-4 text-sm text-teal-700">
-          {message}
-        </p>
-      )}
-
-      {error && (
-        <p role="alert" className="mt-4 text-sm text-red-700">
-          {error}
-        </p>
-      )}
-
-      {editing ? (
-        <form onSubmit={saveChanges} className="mt-6">
-          <p className="mb-5 text-sm text-slate-600">
-            Edit your daily plans below. Changes are saved only when
-            you click Save changes.
-          </p>
-
-          <fieldset disabled={busy} className="space-y-4">
-            <legend className="sr-only">
-              Edit daily itinerary for {trip.destination}
-            </legend>
-
-            {trip.itinerary.map((activity, index) => (
-              <label
-                key={index}
-                className="block rounded-xl bg-slate-50 p-4"
-              >
-                <span className="font-semibold text-teal-800">
-                  Day {index + 1}
-                </span>
-
-                <textarea
-                  name={`day-${index}`}
-                  defaultValue={activity}
-                  required
-                  maxLength={3000}
-                  rows={4}
-                  className="mt-3 w-full resize-y rounded-xl border border-slate-300 bg-white px-4 py-3 leading-7 text-slate-900 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                />
-              </label>
-            ))}
-
-            <div className="flex flex-wrap gap-3">
-              <button
-                type="submit"
-                className="rounded-xl bg-teal-700 px-5 py-3 font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
-              >
-                {busy ? "Saving…" : "Save changes"}
-              </button>
-
-              <button
-                type="button"
-                onClick={cancelEditing}
-                className="rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-            </div>
-          </fieldset>
-        </form>
-      ) : (
-        <>
-          <details className="mt-5 border-t border-slate-100 pt-4">
-            <summary className="cursor-pointer font-semibold text-teal-700">
-              View itinerary
-            </summary>
-
-            <ol className="mt-5 space-y-4">
-              {trip.itinerary.map((activity, index) => (
-                <li
-                  key={index}
-                  className="rounded-xl bg-slate-50 p-4"
-                >
-                  <h4 className="font-semibold text-teal-800">
-                    Day {index + 1}
-                  </h4>
-
-                  <p className="mt-2 whitespace-pre-wrap break-words leading-7 text-slate-700">
-                    {activity}
-                  </p>
-                </li>
-              ))}
-            </ol>
-          </details>
-
-          <button
-            type="button"
-            onClick={startEditing}
-            disabled={anotherTripIsEditing}
-            className="mt-5 rounded-xl border border-teal-700 px-5 py-2.5 text-sm font-semibold text-teal-700 hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Edit trip
-          </button>
-        </>
-      )}
-
-      <p className="mt-4 text-xs text-slate-500">
-        Originally saved {formatDate(trip.created_at)}
-      </p>
-    </article>
-  );
-}
-
 export default function ProfilePage() {
   const [refresh, setRefresh] = useState(0);
-  const [editingTripId, setEditingTripId] = useState<string | null>(
-    null
-  );
+  const [activeTripId, setActiveTripId] = useState<string | null>(null);
+  const [notice, setNotice] = useState("");
 
   const [profile, setProfile] = useState<ProfileData>({
     user: null,
@@ -309,7 +43,6 @@ export default function ProfilePage() {
 
       try {
         const supabase = createClient();
-
         const {
           data: { user },
           error: authError,
@@ -319,8 +52,8 @@ export default function ProfilePage() {
 
         if (authError || !user) {
           knownUserId = null;
-          setEditingTripId(null);
-
+          setActiveTripId(null);
+          setNotice("");
           setProfile({
             user: null,
             trips: [],
@@ -335,7 +68,6 @@ export default function ProfilePage() {
         }
 
         knownUserId = user.id;
-
         setProfile({
           user,
           trips: [],
@@ -363,14 +95,13 @@ export default function ProfilePage() {
         if (!active || currentRequest !== requestNumber) return;
 
         knownUserId = null;
-        setEditingTripId(null);
-
+        setActiveTripId(null);
+        setNotice("");
         setProfile({
           user: null,
           trips: [],
           loading: false,
-          error:
-            "Could not connect. Check your connection and try again.",
+          error: "Could not connect. Check your connection and try again.",
         });
       }
     }
@@ -385,10 +116,10 @@ export default function ProfilePage() {
           if (event === "SIGNED_OUT") {
             requestNumber++;
             knownUserId = null;
-
             if (timer) clearTimeout(timer);
 
-            setEditingTripId(null);
+            setActiveTripId(null);
+            setNotice("");
             setProfile({
               user: null,
               trips: [],
@@ -407,7 +138,8 @@ export default function ProfilePage() {
             requestNumber++;
             knownUserId = session.user.id;
 
-            setEditingTripId(null);
+            setActiveTripId(null);
+            setNotice("");
             setProfile({
               user: null,
               trips: [],
@@ -422,7 +154,6 @@ export default function ProfilePage() {
 
           if (event === "USER_UPDATED") {
             const updatedUser = session.user;
-
             setProfile((current) =>
               current.user?.id === updatedUser.id
                 ? { ...current, user: updatedUser }
@@ -442,7 +173,6 @@ export default function ProfilePage() {
     return () => {
       active = false;
       requestNumber++;
-
       if (timer) clearTimeout(timer);
       unsubscribe();
     };
@@ -451,15 +181,15 @@ export default function ProfilePage() {
   const { user, trips, loading, error } = profile;
 
   function reloadProfile() {
-    if (editingTripId) return;
+    if (activeTripId) return;
 
+    setNotice("");
     setProfile({
       user: null,
       trips: [],
       loading: true,
       error: "",
     });
-
     setRefresh((current) => current + 1);
   }
 
@@ -481,17 +211,17 @@ export default function ProfilePage() {
           <button
             type="button"
             onClick={reloadProfile}
-            disabled={loading || editingTripId !== null}
+            disabled={loading || activeTripId !== null}
             className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold hover:bg-slate-50 disabled:opacity-50"
           >
             {loading ? "Loading…" : "Refresh"}
           </button>
         </div>
 
-        {editingTripId && (
+        {activeTripId && (
           <p className="mt-4 text-sm text-slate-600">
-            Save or cancel your trip edits before refreshing or
-            leaving this page.
+            Finish or cancel the current trip action before
+            refreshing. Unsaved edits are lost if you leave this page.
           </p>
         )}
 
@@ -515,12 +245,9 @@ export default function ProfilePage() {
             <h2 className="text-xl font-semibold">
               Sign in to view your profile
             </h2>
-
             <p className="mt-3 text-slate-600">
-              Your account information and saved trips will appear
-              here.
+              Your account information and saved trips will appear here.
             </p>
-
             <Link
               href="/login"
               className="mt-6 inline-block rounded-xl bg-teal-700 px-6 py-3 font-semibold text-white hover:bg-teal-800"
@@ -593,15 +320,11 @@ export default function ProfilePage() {
               </dl>
             </section>
 
-            <section
-              aria-labelledby="trips-title"
-              className="mt-10"
-            >
+            <section aria-labelledby="trips-title" className="mt-10">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <h2 id="trips-title" className="text-2xl font-bold">
                   My trips
                 </h2>
-
                 <Link
                   href="/#planner"
                   className="font-semibold text-teal-700 hover:underline"
@@ -611,8 +334,17 @@ export default function ProfilePage() {
               </div>
 
               <p className="mt-2 text-slate-600">
-                View your saved itineraries or edit their daily plans.
+                View, update, and manage your saved journeys.
               </p>
+
+              {notice && (
+                <p
+                  role="status"
+                  className="mt-4 rounded-xl bg-teal-50 p-4 text-sm text-teal-800"
+                >
+                  {notice}
+                </p>
+              )}
 
               {loading && (
                 <p role="status" className="mt-6 text-slate-600">
@@ -638,34 +370,46 @@ export default function ProfilePage() {
                     key={`${user.id}:${trip.id}`}
                     trip={trip}
                     ownerId={user.id}
-                    editing={editingTripId === trip.id}
-                    anotherTripIsEditing={
-                      editingTripId !== null &&
-                      editingTripId !== trip.id
+                    locked={
+                      activeTripId !== null &&
+                      activeTripId !== trip.id
                     }
-                    onStartEditing={() =>
-                      setEditingTripId(trip.id)
-                    }
-                    onStopEditing={() =>
-                      setEditingTripId((current) =>
-                        current === trip.id ? null : current
-                      )
-                    }
+                    onActiveChange={(isActive) => {
+                      setActiveTripId((current) =>
+                        isActive
+                          ? trip.id
+                          : current === trip.id
+                            ? null
+                            : current
+                      );
+                      if (isActive) setNotice("");
+                    }}
                     onSaved={(updatedTrip) => {
-                      setProfile((current) => {
-                        if (current.user?.id !== user.id) {
-                          return current;
-                        }
-
-                        return {
-                          ...current,
-                          trips: current.trips.map((savedTrip) =>
-                            savedTrip.id === updatedTrip.id
-                              ? updatedTrip
-                              : savedTrip
-                          ),
-                        };
-                      });
+                      setProfile((current) =>
+                        current.user?.id === user.id
+                          ? {
+                              ...current,
+                              trips: current.trips.map((savedTrip) =>
+                                savedTrip.id === updatedTrip.id
+                                  ? updatedTrip
+                                  : savedTrip
+                              ),
+                            }
+                          : current
+                      );
+                    }}
+                    onDeleted={(deletedId) => {
+                      setProfile((current) =>
+                        current.user?.id === user.id
+                          ? {
+                              ...current,
+                              trips: current.trips.filter(
+                                (savedTrip) => savedTrip.id !== deletedId
+                              ),
+                            }
+                          : current
+                      );
+                      setNotice("The trip has been deleted.");
                     }}
                   />
                 ))}

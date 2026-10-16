@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import AccountHeader from "../components/AccountHeader";
 import { createClient } from "../../lib/supabase/client";
-
+import ProfileEditor from "../components/ProfileEditor";
 type SavedTrip = {
   id: string;
   destination: string;
@@ -172,11 +172,6 @@ export default function ProfilePage() {
 
   const { user, trips, loading, error } = profile;
 
-  const storedName = user?.user_metadata?.full_name;
-  const displayName =
-    typeof storedName === "string" && storedName.trim()
-      ? storedName.trim()
-      : "YatraMate traveler";
 
   function reloadProfile() {
     setProfile({
@@ -253,26 +248,17 @@ export default function ProfilePage() {
               aria-labelledby="account-title"
               className="mt-8 rounded-3xl border border-slate-200 bg-white p-6 sm:p-8"
             >
-              <div className="flex items-center gap-4">
-                <div
-                  aria-hidden="true"
-                  className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-teal-100 text-2xl font-bold text-teal-800"
-                >
-                  {(user.email?.[0] ?? "Y").toUpperCase()}
-                </div>
-
-                <div className="min-w-0">
-                  <h2
-                    id="account-title"
-                    className="break-words text-2xl font-bold"
-                  >
-                    {displayName}
-                  </h2>
-                  <p className="mt-1 text-slate-500">
-                    Account information
-                  </p>
-                </div>
-              </div>
+              <ProfileEditor
+                  key={user.id}
+                  user={user}
+                  onSaved={(updatedUser) => {
+                  setProfile((current) =>
+                  current.user?.id === updatedUser.id
+                  ? { ...current, user: updatedUser }
+                  : current
+                  );
+                  }}
+              />
 
               <dl className="mt-8 grid gap-6 sm:grid-cols-2">
                 <div>

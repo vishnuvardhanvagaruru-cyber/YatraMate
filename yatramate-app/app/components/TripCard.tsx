@@ -510,6 +510,16 @@ export default function TripCard({
           </div>
         </>
       )}
+      <a
+  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+    trip.destination
+  )}`}
+  target="_blank"
+  rel="noopener noreferrer"
+  className="mt-5 inline-flex items-center justify-center rounded-xl border border-teal-700 px-5 py-3 font-semibold text-teal-700 transition hover:bg-teal-50"
+>
+  Open in Google Maps ↗
+</a>
 
       <p className="mt-4 text-xs text-slate-500">
         Originally saved {formatDate(trip.created_at)}

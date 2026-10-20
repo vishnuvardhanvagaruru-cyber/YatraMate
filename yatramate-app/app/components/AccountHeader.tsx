@@ -110,6 +110,12 @@ export default function AccountHeader() {
           >
             Plan a trip
           </Link>
+          <Link
+  href="/explore"
+  className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+>
+  Explore
+</Link>
 
           {loading ? (
             <span className="text-sm text-slate-500">

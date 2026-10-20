@@ -185,59 +185,60 @@ export default function Home() {
       }
 
       const { data } = supabase.auth.onAuthStateChange(
-        (event, session) => {
-          if (!active || event === "INITIAL_SESSION") return;
+  (event, session) => {
+    if (!active || event === "INITIAL_SESSION") return;
 
-          if (event === "SIGNED_OUT") {
-            requestNumber++;
-            currentUserId = null;
-            if (timer) clearTimeout(timer);
+    if (event === "SIGNED_OUT") {
+      requestNumber++;
+      currentUserId = null;
 
-            setDashboard({
-              ...emptyDashboard,
-              loading: false,
-            });
-            setTrip(null);
-            return;
-          }
+      if (timer) clearTimeout(timer);
 
-          if (
-            event === "USER_UPDATED" &&
-            session !== null &&
-            session.user.id === currentUserId
-          ) { {
-            const rawName = session.user.user_metadata?.full_name;
+      setDashboard({
+        ...emptyDashboard,
+        loading: false,
+      });
+      setTrip(null);
+      return;
+    }
 
-            setDashboard((current) => ({
-              ...current,
-              name:
-                typeof rawName === "string" && rawName.trim()
-                  ? rawName.trim()
-                  : "traveler",
-            }));
-            return;
-          }
+    if (!session) return;
 
-          if (
-            session?.user &&
-            session.user.id !== currentUserId
-          ) {
-            requestNumber++;
-            currentUserId = session.user.id;
-            setDashboard(emptyDashboard);
-            setTrip(null);
+    const sessionUser = session.user;
 
-            if (timer) clearTimeout(timer);
+    if (
+      event === "USER_UPDATED" &&
+      sessionUser.id === currentUserId
+    ) {
+      const rawName = sessionUser.user_metadata?.full_name;
 
-            // Load outside the authentication callback.
-            timer = setTimeout(() => {
-              if (active) void loadDashboard();
-            }, 0);
-          }
-        }
-      );
+      setDashboard((current) => ({
+        ...current,
+        name:
+          typeof rawName === "string" && rawName.trim()
+            ? rawName.trim()
+            : "traveler",
+      }));
+      return;
+    }
 
-      unsubscribe = () => data.subscription.unsubscribe();
+    if (sessionUser.id !== currentUserId) {
+      requestNumber++;
+      currentUserId = sessionUser.id;
+
+      setDashboard(emptyDashboard);
+      setTrip(null);
+
+      if (timer) clearTimeout(timer);
+
+      timer = setTimeout(() => {
+        if (active) void loadDashboard();
+      }, 0);
+    }
+  }
+);
+
+unsubscribe = () => data.subscription.unsubscribe();
 
       void loadDashboard();
     } catch {

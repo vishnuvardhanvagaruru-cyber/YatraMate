@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import AccountHeader from "../components/AccountHeader";
 import ProfileEditor from "../components/ProfileEditor";
+import SavedPlaces from "../components/SavedPlaces";
 import TripCard, {
   formatDate,
   tripColumns,
@@ -259,6 +260,7 @@ export default function ProfilePage() {
 
         {user && (
           <>
+          
             <section
               aria-labelledby="account-title"
               className="mt-8 rounded-3xl border border-slate-200 bg-white p-6 sm:p-8"
@@ -319,7 +321,7 @@ export default function ProfilePage() {
                 </div>
               </dl>
             </section>
-
+            <SavedPlaces key={user.id} userId={user.id} />
             <section aria-labelledby="trips-title" className="mt-10">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <h2 id="trips-title" className="text-2xl font-bold">

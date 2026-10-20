@@ -203,8 +203,9 @@ export default function Home() {
 
           if (
             event === "USER_UPDATED" &&
-            session?.user.id === currentUserId
-          ) {
+            session !== null &&
+            session.user.id === currentUserId
+          ) { {
             const rawName = session.user.user_metadata?.full_name;
 
             setDashboard((current) => ({

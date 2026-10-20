@@ -227,12 +227,11 @@ export default function ExplorePage() {
     }
 
     return () => {
-      active = false;
-      mounted.current = false;
-      generation.current++;
-      if (timer) clearTimeout(timer);
-      unsubscribe();
-    };
+  active = false;
+  mounted.current = false;
+  if (timer) clearTimeout(timer);
+  unsubscribe();
+};
   }, [refresh]);
 
   function reload() {

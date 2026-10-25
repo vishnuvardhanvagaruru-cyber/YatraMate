@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import AccountHeader from "../components/AccountHeader";
+import AddPlaceToTrip from "../components/AddPlaceToTrip";
 import { createClient } from "../../lib/supabase/client";
 
 type Place = {
@@ -660,6 +661,7 @@ export default function ExplorePage() {
                           </Link>
                         )}
                       </div>
+                      <AddPlaceToTrip key={`${data.userId ?? "guest"}:${place.id}`} place={place} />
                     </article>
                   );
                 })}

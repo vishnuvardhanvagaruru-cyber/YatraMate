@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "../../lib/supabase/client";
+import AddPlaceToTrip from "./AddPlaceToTrip";
 
 type Place = {
   id: string;
@@ -319,6 +320,7 @@ export default function SavedPlaces({ userId }: Props) {
                   {busyId === place.id ? "Removing…" : "Remove"}
                 </button>
               </div>
+              <AddPlaceToTrip key={`${userId}:${place.id}`} place={place} />
             </article>
           ))}
         </div>

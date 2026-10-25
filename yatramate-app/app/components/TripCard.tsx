@@ -12,17 +12,20 @@ export type SavedTrip = {
   budget: number;
   itinerary: string[];
   created_at: string;
+  version: number;
 };
 
 export const tripColumns =
-  "id, destination, start_date, days, travelers, budget, itinerary, created_at";
+  "id, destination, start_date, days, travelers, budget, itinerary, created_at, version";
 
 export function formatDate(value: string) {
   const date = new Date(
-    value.length === 10 ? `${value}T00:00:00` : value
+    value.length === 10 ? `${value}T12:00:00` : value
   );
 
-  if (Number.isNaN(date.getTime())) return "Not available";
+  if (Number.isNaN(date.getTime())) {
+    return "Not available";
+  }
 
   return date.toLocaleDateString("en-IN", {
     day: "numeric",
@@ -67,6 +70,7 @@ export default function TripCard({
   const [message, setMessage] = useState("");
 
   const pending = useRef(false);
+  const editVersion = useRef(trip.version);
 
   const requestedDays = Number(days);
 
@@ -78,6 +82,9 @@ export default function TripCard({
   const visibleDays = validDays ? requestedDays : trip.days;
 
   function startEditing() {
+    if (locked || pending.current) return;
+
+    editVersion.current = trip.version;
     setDays(String(trip.days));
 
     setPlans(
@@ -94,6 +101,8 @@ export default function TripCard({
   }
 
   function startDeleting() {
+    if (locked || pending.current) return;
+
     setError("");
     setMessage("");
     setMode("delete");
@@ -114,10 +123,10 @@ export default function TripCard({
 
     const {
       data: { user },
-      error,
+      error: authError,
     } = await supabase.auth.getUser();
 
-    if (error || !user || user.id !== ownerId) {
+    if (authError || !user || user.id !== ownerId) {
       throw new Error(
         "Your account session changed. Please log in again."
       );
@@ -139,9 +148,17 @@ export default function TripCard({
 
     const travelers = Number(travelersText);
     const budget = Number(budgetText);
+    const parsedDate = new Date(`${startDate}T12:00:00`);
+
+    const validStartDate =
+      /^\d{4}-\d{2}-\d{2}$/.test(startDate) &&
+      !Number.isNaN(parsedDate.getTime()) &&
+      parsedDate.getFullYear() === Number(startDate.slice(0, 4)) &&
+      parsedDate.getMonth() + 1 === Number(startDate.slice(5, 7)) &&
+      parsedDate.getDate() === Number(startDate.slice(8, 10));
 
     if (
-      !/^\d{4}-\d{2}-\d{2}$/.test(startDate) ||
+      !validStartDate ||
       !validDays ||
       !travelersText ||
       !Number.isInteger(travelers) ||
@@ -153,6 +170,13 @@ export default function TripCard({
       budget > 100000000
     ) {
       setError("Please check your trip details.");
+      return;
+    }
+
+    if (!Number.isInteger(editVersion.current)) {
+      setError(
+        "This trip needs to be reloaded. Copy any unsaved text, cancel editing, and refresh your profile."
+      );
       return;
     }
 
@@ -191,7 +215,7 @@ export default function TripCard({
     try {
       const { supabase, user } = await verifyAccount();
 
-      const { data, error } = await supabase
+      const { data, error: updateError } = await supabase
         .from("trips")
         .update({
           start_date: startDate,
@@ -202,25 +226,28 @@ export default function TripCard({
         })
         .eq("id", trip.id)
         .eq("user_id", user.id)
+        .eq("version", editVersion.current)
         .select(tripColumns)
-        .single();
+        .maybeSingle();
 
-      if (error) {
-        throw new Error(error.message);
+      if (updateError) {
+        throw new Error(updateError.message);
       }
 
       if (!data) {
-        throw new Error("The update could not be confirmed.");
+        throw new Error(
+          "This trip changed elsewhere or was deleted. Copy any unsaved text, cancel editing, and refresh your profile before trying again."
+        );
       }
 
       onSaved(data as SavedTrip);
       setMode("view");
       onActiveChange(false);
       setMessage("Your trip changes have been saved.");
-    } catch (error) {
+    } catch (caught) {
       setError(
-        error instanceof Error
-          ? error.message
+        caught instanceof Error
+          ? caught.message
           : "Could not save. Please try again."
       );
     } finally {
@@ -239,7 +266,7 @@ export default function TripCard({
     try {
       const { supabase, user } = await verifyAccount();
 
-      const { data, error } = await supabase
+      const { data, error: deleteError } = await supabase
         .from("trips")
         .delete()
         .eq("id", trip.id)
@@ -247,8 +274,8 @@ export default function TripCard({
         .select("id")
         .maybeSingle();
 
-      if (error) {
-        throw new Error(error.message);
+      if (deleteError) {
+        throw new Error(deleteError.message);
       }
 
       if (!data) {
@@ -259,10 +286,10 @@ export default function TripCard({
 
       onActiveChange(false);
       onDeleted(data.id);
-    } catch (error) {
+    } catch (caught) {
       setError(
-        error instanceof Error
-          ? error.message
+        caught instanceof Error
+          ? caught.message
           : "Could not delete. Please try again."
       );
     } finally {
@@ -272,7 +299,7 @@ export default function TripCard({
   }
 
   return (
-    <article className="rounded-2xl border border-slate-200 bg-white p-6">
+    <article className="rounded-2xl border border-slate-200 bg-white p-6 text-slate-900">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h3 className="break-words text-xl font-bold">
@@ -493,7 +520,7 @@ export default function TripCard({
             <button
               type="button"
               onClick={startEditing}
-              disabled={locked}
+              disabled={locked || busy}
               className={secondaryButton}
             >
               Edit trip
@@ -502,7 +529,7 @@ export default function TripCard({
             <button
               type="button"
               onClick={startDeleting}
-              disabled={locked}
+              disabled={locked || busy}
               className="rounded-xl border border-red-200 px-5 py-3 font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
             >
               Delete trip
@@ -510,16 +537,17 @@ export default function TripCard({
           </div>
         </>
       )}
+
       <a
-  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-    trip.destination
-  )}`}
-  target="_blank"
-  rel="noopener noreferrer"
-  className="mt-5 inline-flex items-center justify-center rounded-xl border border-teal-700 px-5 py-3 font-semibold text-teal-700 transition hover:bg-teal-50"
->
-  Open in Google Maps ↗
-</a>
+        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+          trip.destination
+        )}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-5 inline-flex items-center justify-center rounded-xl border border-teal-700 px-5 py-3 font-semibold text-teal-700 transition hover:bg-teal-50"
+      >
+        Open in Google Maps ↗
+      </a>
 
       <p className="mt-4 text-xs text-slate-500">
         Originally saved {formatDate(trip.created_at)}

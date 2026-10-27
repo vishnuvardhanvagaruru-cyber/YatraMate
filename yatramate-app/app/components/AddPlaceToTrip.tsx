@@ -24,34 +24,41 @@ type Props = {
 const fieldStyle =
   "mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-slate-900";
 
-function normalizeDestination(value: string) {
-  return value
-    .replace(/[ \t\r\n]+/g, " ")
-    .replace(/^ +| +$/g, "")
-    .toLowerCase();
+function tripDate(startDate: string, offset = 0) {
+  const date = new Date(startDate + "T00:00:00Z");
+  if (Number.isNaN(date.getTime())) return "Date unavailable";
+  date.setUTCDate(date.getUTCDate() + offset);
+  return date.toLocaleDateString("en-IN", {
+    day: "numeric", month: "short", year: "numeric", timeZone: "UTC",
+  });
+}
+
+function dateRange(trip: TripOption) {
+  const start = tripDate(trip.start_date);
+  return trip.days === 1 ? start : start + " – " + tripDate(trip.start_date, trip.days - 1);
 }
 
 function dayLabel(startDate: string, day: number) {
-  const date = new Date(`${startDate}T12:00:00`);
+  return "Day " + day + " · " + tripDate(startDate, day - 1);
+}
 
-  if (Number.isNaN(date.getTime())) {
-    return `Day ${day}`;
-  }
-
-  date.setDate(date.getDate() + day - 1);
-
-  return `Day ${day} · ${date.toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  })}`;
+function tripLabel(trip: TripOption, trips: TripOption[]) {
+  const similar = trips.filter(
+    (item) => item.destination === trip.destination &&
+      item.start_date === trip.start_date && item.days === trip.days
+  );
+  const reference = similar.length > 1
+    ? " · Trip " + (similar.findIndex((item) => item.id === trip.id) + 1)
+    : "";
+  return trip.destination + " · " + dateRange(trip) + " · " +
+    trip.days + (trip.days === 1 ? " day" : " days") + reference;
 }
 
 export default function AddPlaceToTrip({ place }: Props) {
   const [open, setOpen] = useState(false);
   const [trips, setTrips] = useState<TripOption[]>([]);
   const [tripId, setTripId] = useState("");
-  const [day, setDay] = useState("1");
+  const [day, setDay] = useState("");
   const [ownerId, setOwnerId] = useState<string | null>(null);
   const [needsLogin, setNeedsLogin] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -70,13 +77,14 @@ export default function AddPlaceToTrip({ place }: Props) {
     };
   }, []);
 
-  const matchingTrips = trips.filter(
-    (trip) =>
-      normalizeDestination(trip.destination) ===
-      normalizeDestination(place.destination)
-  );
+  const matchingTrips = trips;
 
   const selectedTrip = matchingTrips.find((trip) => trip.id === tripId);
+  const selectedDay = Number(day);
+  const hasValidDay = !!selectedTrip && day !== "" &&
+    Number.isInteger(selectedDay) && selectedDay >= 1 &&
+    selectedDay <= selectedTrip.days;
+
 
   async function loadTrips() {
     if (pending.current) return;
@@ -90,7 +98,7 @@ export default function AddPlaceToTrip({ place }: Props) {
     setOwnerId(null);
     setTrips([]);
     setTripId("");
-    setDay("1");
+    setDay("");
 
     try {
       const supabase = createClient();
@@ -118,9 +126,9 @@ export default function AddPlaceToTrip({ place }: Props) {
 
       for (let from = 0; ; from += pageSize) {
         const { data, error: queryError } = await supabase
-          .from("trips")
-          .select("id, destination, start_date, days")
-          .eq("user_id", user.id)
+          .rpc("matching_trips_for_place", {
+            p_place_id: place.id,
+          })
           .order("start_date", { ascending: false })
           .order("id")
           .range(from, from + pageSize - 1);
@@ -129,7 +137,7 @@ export default function AddPlaceToTrip({ place }: Props) {
 
         if (queryError) {
           throw new Error(
-            "Could not load your trips. Please try again."
+            "Could not load matching trips. Please try again."
           );
         }
 
@@ -319,7 +327,8 @@ export default function AddPlaceToTrip({ place }: Props) {
 
           {!loading && !error && ownerId && matchingTrips.length === 0 && (
             <p className="mt-3 text-sm text-slate-700">
-              No saved trips match {place.destination}. Save a trip with this destination to add this place.{" "}
+              No saved trips match {place.destination}. Save a trip using this
+              destination name or a recognised variant.{" "}
               <Link
                 href="/#planner"
                 className="font-semibold text-teal-800 underline"
@@ -344,7 +353,7 @@ export default function AddPlaceToTrip({ place }: Props) {
                   value={tripId}
                   onChange={(event) => {
                     setTripId(event.target.value);
-                    setDay("1");
+                    setDay("");
                     setError("");
                     setMessage("");
                   }}
@@ -354,8 +363,7 @@ export default function AddPlaceToTrip({ place }: Props) {
 
                   {matchingTrips.map((trip) => (
                     <option key={trip.id} value={trip.id}>
-                      {trip.destination} · {trip.start_date} ·{" "}
-                      {trip.days} days
+                      {tripLabel(trip, matchingTrips)}
                     </option>
                   ))}
                 </select>
@@ -374,6 +382,7 @@ export default function AddPlaceToTrip({ place }: Props) {
                       }}
                       className={fieldStyle}
                     >
+                      <option value="">Choose a day</option>
                       {Array.from(
                         { length: selectedTrip.days },
                         (_, index) => (
@@ -388,14 +397,37 @@ export default function AddPlaceToTrip({ place }: Props) {
                     </select>
                   </label>
 
-                  <p className="text-sm text-slate-600">
-                    Adds a visit to the end of this day’s existing
-                    plan.
-                  </p>
+                  {hasValidDay ? (
+                    <div className="rounded-xl border border-teal-200 bg-white p-4 text-sm">
+                      <p className="font-semibold text-teal-900">Check your selection</p>
+                      <dl className="mt-3 space-y-3">
+                        <div>
+                          <dt className="text-slate-500">Place</dt>
+                          <dd className="break-words font-semibold">{place.name} · {place.destination}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-slate-500">Saved trip</dt>
+                          <dd className="break-words">{tripLabel(selectedTrip, matchingTrips)}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-slate-500">Visit day</dt>
+                          <dd className="font-semibold">{dayLabel(selectedTrip.start_date, selectedDay)}</dd>
+                        </div>
+                      </dl>
+                      <p className="mt-3 text-slate-600">
+                        This visit will be appended to this day’s existing plan.
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-600">
+                      Choose the day you want to visit {place.name}.
+                    </p>
+                  )}
 
                   <button
                     type="button"
                     onClick={() => void addPlace()}
+                    disabled={saving || !hasValidDay}
                     className="rounded-xl bg-teal-700 px-4 py-3 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
                   >
                     {saving ? "Adding…" : "Add place to this day"}

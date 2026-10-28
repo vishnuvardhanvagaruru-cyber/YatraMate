@@ -15,6 +15,7 @@ type TripOption = {
   destination: string;
   start_date: string;
   days: number;
+  version: number;
 };
 
 type Props = {
@@ -218,6 +219,7 @@ export default function AddPlaceToTrip({ place }: Props) {
           p_trip_id: selectedTrip.id,
           p_place_id: place.id,
           p_day: selectedDay,
+          p_expected_version: selectedTrip.version,
         }
       );
 
